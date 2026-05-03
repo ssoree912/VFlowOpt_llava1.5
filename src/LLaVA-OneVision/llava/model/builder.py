@@ -182,22 +182,47 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
                 or "llava-v1.6-34b" in model_name.lower()
                 or "llava-v1.5" in model_name.lower()
             ):
-                from llava.model.language_model.llava_llama import LlavaConfig
+                if "training_free" in model_name.lower():
+                    from llava.model.language_model.llava_llama_training_free import (
+                        LlavaLlamaTrainingFreeConfig,
+                        LlavaLlamaTrainingFreeForCausalLM,
+                    )
 
-                tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=False)
-                if customized_config is None:
-                    llava_cfg = LlavaConfig.from_pretrained(model_path)
-                    if "v1.5" in model_name.lower():
-                        llava_cfg.delay_load = True  # a workaround for correctly loading v1.5 models
+                    tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=False)
+                    if customized_config is None:
+                        llava_cfg = LlavaLlamaTrainingFreeConfig.from_pretrained(model_path)
+                        if "v1.5" in model_name.lower():
+                            llava_cfg.delay_load = True
+                    else:
+                        llava_cfg = customized_config
+                    if overwrite_config is not None:
+                        rank0_print(f"Overwriting config with {overwrite_config}")
+                        for k, v in overwrite_config.items():
+                            setattr(llava_cfg, k, v)
+                    model = LlavaLlamaTrainingFreeForCausalLM.from_pretrained(
+                        model_path,
+                        low_cpu_mem_usage=True,
+                        attn_implementation=attn_implementation,
+                        config=llava_cfg,
+                        **kwargs,
+                    )
                 else:
-                    llava_cfg = customized_config
+                    from llava.model.language_model.llava_llama import LlavaConfig
 
-                if overwrite_config is not None:
-                    rank0_print(f"Overwriting config with {overwrite_config}")
-                    for k, v in overwrite_config.items():
-                        setattr(llava_cfg, k, v)
+                    tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=False)
+                    if customized_config is None:
+                        llava_cfg = LlavaConfig.from_pretrained(model_path)
+                        if "v1.5" in model_name.lower():
+                            llava_cfg.delay_load = True  # a workaround for correctly loading v1.5 models
+                    else:
+                        llava_cfg = customized_config
 
-                model = LlavaLlamaForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=True, attn_implementation=attn_implementation, config=llava_cfg, **kwargs)
+                    if overwrite_config is not None:
+                        rank0_print(f"Overwriting config with {overwrite_config}")
+                        for k, v in overwrite_config.items():
+                            setattr(llava_cfg, k, v)
+
+                    model = LlavaLlamaForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=True, attn_implementation=attn_implementation, config=llava_cfg, **kwargs)
 
             elif "qwen" in model_name.lower() or "quyen" in model_name.lower():
                 tokenizer = AutoTokenizer.from_pretrained(model_path)

@@ -1,0 +1,37 @@
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Build / dist
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Local conda / virtualenvs
+.conda/
+.venv/
+venv/
+env/
+
+# Logs and checkpoints from local runs
+logs/
+*.log
+wandb/
+runs/
+outputs/
+ckpts/
+checkpoints/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Claude Code metadata
+.claude/
