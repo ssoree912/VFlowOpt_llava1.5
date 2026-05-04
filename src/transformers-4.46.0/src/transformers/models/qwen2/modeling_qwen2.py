@@ -1014,7 +1014,7 @@ class Qwen2Model(Qwen2PreTrainedModel):
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions or illava_config != None else None
+        all_self_attns = () if output_attentions else None
         next_decoder_cache = None
 
         # illava constants
@@ -1124,11 +1124,16 @@ class Qwen2Model(Qwen2PreTrainedModel):
                     # update the length of image tokens for each layer 
                     image_token_length -= r  
 
-            if layer_idx == illava_llm_k[0]-1:
-                output_attentions = True
-            else:
-                output_attentions = False
-            
+            # The use_cache=True prefill path computes the eviction mask once
+            # at illava_llm_k[0] using the ViT attention map (combined_attn) —
+            # it does NOT consume any layer's self-attention output. Forcing
+            # output_attentions=True at layer illava_llm_k[0]-1 makes SDPA fall
+            # back to eager attention, materializing a (B, H, T, T) score
+            # matrix that costs ~2 GB at T=6k frames — the dominant peak in
+            # the prefill. Only the use_cache=False branch (still upstream)
+            # actually reads last_layer_attention_avg, so gate it on that.
+            output_attentions = (not use_cache) and (layer_idx == illava_llm_k[0] - 1)
+
             layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=pruned_attention_mask,
