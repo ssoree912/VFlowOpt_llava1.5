@@ -1,6 +1,7 @@
-dataset_path: lmms-lab/flickr30k
+dataset_path: parquet
 dataset_kwargs:
-  token: True
+  data_files:
+    test: /workspace/zap/data/eval/flickr30k/data/test-*.parquet
 task : "flickr30k_test"
 test_split: test
 output_type: generate_until

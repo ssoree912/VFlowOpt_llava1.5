@@ -1,0 +1,7 @@
+model,ratio,MME,MMB,SQA,VizWiz,GQA,POPE,VQAText,ChartQA,DocVQA,MMStar
+illava,0.10,1467.5,74.8,87.9,57.6,53.4,85.2,,,,
+illava,0.25,1570.1,79.5,92.2,60.8,61.1,88.7,,,,
+illava,0.50,,81.1,95.2,,61.8,89.2,,0.0,,
+student_ep20,0.10,,80.8,,,,,,,,
+student_ep20,0.25,,80.8,,60.3,62.3,89.2,75.8,80.2,,
+student_ep20,0.50,,,,,,,,,,

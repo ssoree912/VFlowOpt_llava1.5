@@ -92,6 +92,7 @@ class Llava_OneVision_Training_Free(lmms):
         enable_illava_llm : Optional[bool] = False,
         illava_llm_k : Optional[str] = None,   # Input with format like '2-3' denoting layers 2 and 3
         illava_llm_r : Optional[float] = 0.0, 
+        illava_keep_ratio: Optional[float] = 0.25,
         illava_llm_image_token_start_index : Optional[int] =14, 
         illava_track_vit_source: Optional[bool] = False,  # Perform visualization
         illava_track_llm_source: Optional[bool] = False,  # Perform visualization
@@ -138,32 +139,41 @@ class Llava_OneVision_Training_Free(lmms):
         
         if illava_track_llm_source and enable_illava_vit:
             illava_track_vit_source = True
-        self.illava_config = {
-                # Please set the hyperparameters.
-
-                # # 50%
-                # "illava_vit_t": 28.683047941520474,
-                # "illava_vit_alpha_v": 0,
-                # "illava_vit_m": 11.756787150848968, 
-                # "illava_vit_r": 0.7233201448753168,
-                # "illava_llm_r": [0.748747637472693, 0.487],
-
-                # # 25%
-                # "illava_vit_t": 34.759552803070484,
-                # "illava_vit_alpha_v": 0,
-                # "illava_vit_m": 15.580797034937687, 
-                # "illava_vit_r": 0.2651026358526424,
-                # "illava_llm_r": [0.9833433139039235, 0.8773258179532721],
-
-
-
-                # 10% 
+        keep_ratio = float(illava_keep_ratio)
+        keep_ratio_configs = {
+            0.50: {
+                "illava_vit_t": 28.683047941520474,
+                "illava_vit_alpha_v": 0,
+                "illava_vit_m": 11.756787150848968,
+                "illava_vit_r": 0.7233201448753168,
+                "illava_llm_r": [0.748747637472693, 0.487],
+            },
+            0.25: {
+                "illava_vit_t": 34.759552803070484,
+                "illava_vit_alpha_v": 0,
+                "illava_vit_m": 15.580797034937687,
+                "illava_vit_r": 0.2651026358526424,
+                "illava_llm_r": [0.9833433139039235, 0.8773258179532721],
+            },
+            0.10: {
                 "illava_vit_t": 39.26492840997221,
                 "illava_vit_alpha_v": 0,
-                "illava_vit_m": 17.386981849158786, 
+                "illava_vit_m": 17.386981849158786,
                 "illava_vit_r": 0.11661529508161146,
                 "illava_llm_r": [1.0, 0.6011],
+            },
+        }
+        selected_keep_ratio = None
+        for configured_keep_ratio in keep_ratio_configs:
+            if abs(keep_ratio - configured_keep_ratio) < 1e-6:
+                selected_keep_ratio = configured_keep_ratio
+                break
+        if selected_keep_ratio is None:
+            raise ValueError(f"Unsupported illava_keep_ratio={illava_keep_ratio}; expected one of {sorted(keep_ratio_configs)}")
 
+        self.illava_config = {
+                **keep_ratio_configs[selected_keep_ratio],
+                "illava_keep_ratio": selected_keep_ratio,
                 # Do not modify these hyperparameters.
                 "enable_illava_llm": enable_illava_llm,
                 "illava_llm_k": illava_llm_k,
@@ -578,9 +588,10 @@ class Llava_OneVision_Training_Free(lmms):
                     prompt_question = conv.get_prompt()
                     question_input.append(prompt_question)
 
-            # preconfigure gen_kwargs with defaults
-            # if "max_new_tokens" not in gen_kwargs:
-            gen_kwargs["max_new_tokens"] = 1024
+            # Respect task-defined generation lengths; forcing 1024 here can OOM
+            # short-answer benchmarks such as MME, ChartQA, DocVQA, and MMStar.
+            if "max_new_tokens" not in gen_kwargs:
+                gen_kwargs["max_new_tokens"] = 128
             if "temperature" not in gen_kwargs:
                 gen_kwargs["temperature"] = 0
             if "do_sample" not in gen_kwargs:

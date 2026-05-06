@@ -38,7 +38,7 @@ def sqa_process_results(doc, results):
     if pred == target:
         return {"exact_match": 1.0}
     # pattern: ^[A-Z]\. .*
-    if len(pred) >= 2 and pred[0].isupper() and pred[1] == ".":
+    if len(pred) >= 2 and pred[0].isalpha() and pred[1] == ".":
         result = 1.0 if pred[0] == target else 0.0
         return {"exact_match": result}
     return {"exact_match": 0.0}

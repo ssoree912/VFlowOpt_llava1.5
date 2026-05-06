@@ -18,7 +18,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch LLaMA model."""
+import json
 import math
+import os
 import warnings
 from typing import List, Optional, Tuple, Union
 
@@ -1184,6 +1186,200 @@ class LlamaModel(LlamaPreTrainedModel):
             attentions=all_self_attns,
         )
 
+    @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
+    def forward_illava(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        illava_config=None,
+        source_indice_list=None,
+        raw_frames=None,
+        image_token_length=None,
+    ) -> Union[Tuple, BaseModelOutputWithPast]:
+        if illava_config is None or not illava_config.get("enable_illava_llm", False):
+            return self.forward(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                inputs_embeds=inputs_embeds,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                cache_position=cache_position,
+            )
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one")
+
+        if self.gradient_checkpointing and self.training and use_cache:
+            logger.warning_once("`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.")
+            use_cache = False
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        past_seen_tokens = 0
+        if use_cache:
+            if not isinstance(past_key_values, StaticCache):
+                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+                past_seen_tokens = past_key_values.get_seq_length()
+
+        if cache_position is None:
+            if isinstance(past_key_values, StaticCache):
+                raise ValueError("cache_position is a required argument when using StaticCache.")
+            cache_position = torch.arange(past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device)
+
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds)
+        hidden_states = inputs_embeds
+
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
+        next_decoder_cache = None
+
+        illava_llm_k = illava_config.get("illava_llm_k") or []
+        if isinstance(illava_llm_k, int):
+            illava_llm_k = [illava_llm_k]
+        illava_llm_k = [int(layer_idx) for layer_idx in illava_llm_k]
+
+        illava_llm_r = illava_config.get("illava_llm_r", [])
+        if isinstance(illava_llm_r, (int, float)):
+            illava_llm_r = [float(illava_llm_r)] * max(1, len(illava_llm_k))
+        else:
+            illava_llm_r = [float(ratio) for ratio in illava_llm_r]
+        if len(illava_llm_r) == 1 and len(illava_llm_k) > 1:
+            illava_llm_r = illava_llm_r * len(illava_llm_k)
+        if len(illava_llm_r) != len(illava_llm_k):
+            raise ValueError(f"illava_llm_r length ({len(illava_llm_r)}) must match illava_llm_k length ({len(illava_llm_k)})")
+
+        image_token_start = int(illava_config.get("illava_llm_image_token_start_index", 0))
+        image_token_length = int(image_token_length if image_token_length is not None else illava_config.get("image_token_length", 0))
+        enable_prefill_pruning = hidden_states.shape[1] != 1 and image_token_length > 0 and len(illava_llm_k) > 0
+        debug_shapes = os.environ.get("ILLAVA_DEBUG_SHAPES", "0") == "1"
+        if debug_shapes:
+            print(
+                f"[illava-llama] start seq={hidden_states.shape[1]} image_start={image_token_start} "
+                f"image_len={image_token_length} k={illava_llm_k} r={illava_llm_r}",
+                flush=True,
+            )
+
+        masks_by_layer = {}
+        if enable_prefill_pruning:
+            attn_values = os.environ.get("VIT_ATTN_MAP")
+            if attn_values:
+                combined_attn = torch.tensor(json.loads(attn_values), device=hidden_states.device, dtype=torch.float32)
+            else:
+                combined_attn = torch.ones(image_token_length, device=hidden_states.device, dtype=torch.float32)
+            if combined_attn.numel() < image_token_length:
+                pad = torch.ones(image_token_length - combined_attn.numel(), device=hidden_states.device, dtype=torch.float32)
+                combined_attn = torch.cat([combined_attn, pad], dim=0)
+            combined_attn = combined_attn[:image_token_length]
+
+            simulated_seq_len = hidden_states.shape[1]
+            simulated_image_len = image_token_length
+            for layer_idx, keep_ratio in zip(illava_llm_k, illava_llm_r):
+                remove_count = min(round(simulated_seq_len * (1.0 - keep_ratio)), simulated_image_len)
+                keep_mask = torch.ones(simulated_seq_len, dtype=torch.bool, device=hidden_states.device)
+                if remove_count > 0:
+                    low_k = torch.sort(combined_attn, dim=-1).indices[:remove_count]
+                    keep_mask[image_token_start + low_k] = False
+                    combined_attn = combined_attn[keep_mask[image_token_start : image_token_start + simulated_image_len]]
+                masks_by_layer[layer_idx] = (keep_mask, remove_count)
+                if debug_shapes:
+                    print(
+                        f"[illava-llama] plan layer={layer_idx} keep_ratio={keep_ratio:.6f} "
+                        f"remove={remove_count} next_seq={simulated_seq_len - remove_count} "
+                        f"next_image={simulated_image_len - remove_count}",
+                        flush=True,
+                    )
+                simulated_seq_len -= remove_count
+                simulated_image_len -= remove_count
+
+        current_attention_mask = causal_mask
+        for layer_idx, decoder_layer in enumerate(self.layers):
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            if layer_idx in masks_by_layer:
+                keep_mask, remove_count = masks_by_layer[layer_idx]
+                hidden_states = hidden_states[:, keep_mask, :]
+                position_ids = position_ids[:, keep_mask]
+                current_attention_mask = self._update_causal_mask(None, hidden_states)
+                cache_position = cache_position[: hidden_states.shape[1]]
+                image_token_length -= remove_count
+                if debug_shapes:
+                    print(
+                        f"[illava-llama] apply layer={layer_idx} seq={hidden_states.shape[1]} "
+                        f"pos={position_ids.shape[-1]} cache={cache_position.shape[-1]} image_len={image_token_length}",
+                        flush=True,
+                    )
+
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    decoder_layer.__call__,
+                    hidden_states,
+                    current_attention_mask,
+                    position_ids,
+                    past_key_values,
+                    output_attentions,
+                    use_cache,
+                    cache_position,
+                )
+            else:
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    attention_mask=current_attention_mask,
+                    position_ids=position_ids,
+                    past_key_value=past_key_values,
+                    output_attentions=output_attentions,
+                    use_cache=use_cache,
+                    cache_position=cache_position,
+                )
+
+            hidden_states = layer_outputs[0]
+
+            if use_cache:
+                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
+
+            if output_attentions:
+                all_self_attns += (layer_outputs[1],)
+
+        hidden_states = self.norm(hidden_states)
+
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+        if debug_shapes:
+            print(f"[illava-llama] final seq={hidden_states.shape[1]}", flush=True)
+
+        next_cache = None
+        if use_cache:
+            next_cache = next_decoder_cache.to_legacy_cache() if isinstance(next_decoder_cache, Cache) else next_decoder_cache
+        if not return_dict:
+            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=next_cache,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+        )
+
     # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
     # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
     # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
@@ -1418,6 +1614,77 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             }
         )
         return model_inputs
+
+    def forward_illava(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        illava_config=None,
+        source_indice_list=None,
+        raw_frames=None,
+        image_token_length=None,
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.model.forward_illava(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+            illava_config=illava_config,
+            source_indice_list=source_indice_list,
+            raw_frames=raw_frames,
+            image_token_length=image_token_length,
+        )
+
+        hidden_states = outputs[0]
+        if self.config.pretraining_tp > 1:
+            lm_head_slices = self.lm_head.weight.split(self.vocab_size // self.config.pretraining_tp, dim=0)
+            logits = [F.linear(hidden_states, lm_head_slices[i]) for i in range(self.config.pretraining_tp)]
+            logits = torch.cat(logits, dim=-1)
+        else:
+            logits = self.lm_head(hidden_states)
+        logits = logits.float()
+
+        loss = None
+        if labels is not None:
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            if shift_labels.shape[1] != shift_logits.shape[1]:
+                shift_labels = shift_labels[:, -shift_logits.shape[1] :]
+            loss_fct = CrossEntropyLoss()
+            shift_logits = shift_logits.view(-1, self.config.vocab_size)
+            shift_labels = shift_labels.reshape(-1).to(shift_logits.device)
+            loss = loss_fct(shift_logits, shift_labels)
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return (loss,) + output if loss is not None else output
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):

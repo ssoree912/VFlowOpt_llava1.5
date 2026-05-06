@@ -6,6 +6,7 @@ AVAILABLE_MODELS = {
     "llava_mistral": "LlavaMistralForCausalLM, LlavaMistralConfig",
     "llava_mixtral": "LlavaMixtralForCausalLM, LlavaMixtralConfig",
     "llava_qwen_training_free": "LlavaQwenTrainingFreeForCausalLM, LlavaQwenTrainingFreeConfig",
+    "llava_llama_training_free": "LlavaLlamaTrainingFreeForCausalLM, LlavaLlamaTrainingFreeConfig",
     # "llava_qwen_moe": "LlavaQwenMoeForCausalLM, LlavaQwenMoeConfig",    
     # Add other models as needed
 }

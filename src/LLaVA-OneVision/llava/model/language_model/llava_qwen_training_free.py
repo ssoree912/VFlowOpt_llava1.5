@@ -377,7 +377,16 @@ class LlavaQwenTrainingFreeForCausalLM(Qwen2ForCausalLM, LlavaMetaForCausalLM):
         # rank_print(modalities)
         if vision_tower is None or images is None or input_ids.shape[1] == 1:
             return input_ids, position_ids, attention_mask, past_key_values, None, labels, None
-            
+
+        # Dynamically compute image token start position so pruning targets the correct positions
+        if illava_config is not None and input_ids is not None and input_ids.shape[0] > 0:
+            cur_input_ids = input_ids[0]
+            if attention_mask is not None:
+                cur_input_ids = cur_input_ids[attention_mask[0].bool()]
+            image_positions = torch.where(cur_input_ids == IMAGE_TOKEN_INDEX)[0]
+            if image_positions.numel() > 0:
+                illava_config["illava_llm_image_token_start_index"] = int(image_positions[0].item())
+
         if type(images) is list or images.ndim == 5:
             if type(images) is list:
                 images = [x.unsqueeze(0) if x.ndim == 3 else x for x in images]

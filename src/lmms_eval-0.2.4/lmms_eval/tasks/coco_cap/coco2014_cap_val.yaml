@@ -1,6 +1,7 @@
-dataset_path: lmms-lab/COCO-Caption
+dataset_path: parquet
 dataset_kwargs:
-  token: True
+  data_files:
+    val: /workspace/zap/data/eval/COCO-Caption/data/val-*.parquet
 task: "coco2014_cap_val"
 group : "coco_caption"
 test_split: val

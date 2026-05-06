@@ -1,0 +1,4 @@
+model,ratio,MME,MMB,SQA,VizWiz,GQA,POPE,VQAText,ChartQA,DocVQA,MMStar
+vflowopt,0.10,1467.5,74.8,87.9,57.6,53.4,85.2,,,,
+vflowopt,0.25,1570.1,79.5,92.2,60.8,61.1,88.7,,68.7,,
+vflowopt,0.50,,81.1,95.2,,61.8,89.2,,,,

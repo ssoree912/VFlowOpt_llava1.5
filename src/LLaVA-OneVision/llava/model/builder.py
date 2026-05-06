@@ -173,6 +173,23 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
             elif "mistral" in model_name.lower() or "zephyr" in model_name.lower():
                 tokenizer = AutoTokenizer.from_pretrained(model_path)
                 model = LlavaMistralForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=True, attn_implementation=attn_implementation, **kwargs)
+            elif "llava_llama_training_free" in model_name.lower():
+                from llava.model.language_model.llava_llama_training_free import LlavaLlamaTrainingFreeConfig
+
+                tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=False)
+                if customized_config is None:
+                    llava_cfg = LlavaLlamaTrainingFreeConfig.from_pretrained(model_path)
+                    if "v1.5" in model_path.lower() or "v1.5" in model_name.lower():
+                        llava_cfg.delay_load = True
+                else:
+                    llava_cfg = customized_config
+
+                if overwrite_config is not None:
+                    rank0_print(f"Overwriting config with {overwrite_config}")
+                    for k, v in overwrite_config.items():
+                        setattr(llava_cfg, k, v)
+
+                model = LlavaLlamaTrainingFreeForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=True, attn_implementation=attn_implementation, config=llava_cfg, **kwargs)
             elif (
                 "wizardlm-2" in model_name.lower()
                 and "vicuna" in model_name.lower()

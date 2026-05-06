@@ -1,6 +1,7 @@
-dataset_path: lmms-lab/MMVet
+dataset_path: parquet
 dataset_kwargs:
-  token: True
+  data_files:
+    test: /workspace/zap/data/eval/MMVet/data/test-*.parquet
 task: "mmvet"
 test_split: test
 output_type: generate_until

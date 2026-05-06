@@ -1,0 +1,120 @@
+{
+  "results": {
+    "scienceqa_img_local": {
+      "alias": "scienceqa_img_local",
+      "exact_match,none": 0.9221616261774913,
+      "exact_match_stderr,none": 0.005966987612044331
+    }
+  },
+  "group_subtasks": {
+    "scienceqa_img_local": []
+  },
+  "configs": {
+    "scienceqa_img_local": {
+      "task": "scienceqa_img_local",
+      "dataset_path": "parquet",
+      "dataset_kwargs": {
+        "data_files": {
+          "test": "/workspace/zap/data/eval_hf/ScienceQA/ScienceQA-IMG/test-00000-of-00001.parquet"
+        }
+      },
+      "test_split": "test",
+      "full_docs": false,
+      "process_results_use_image": false,
+      "doc_to_visual": "<function sqa_doc_to_visual at 0x77d8fa4e8b80>",
+      "doc_to_text": "<function sqa_doc_to_text at 0x77d8fa4e8d30>",
+      "doc_to_target": "<function sqa_doc_to_target at 0x77d8fa4e9090>",
+      "process_results": "<function sqa_process_results at 0x77d8fa4e9360>",
+      "description": "",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "num_fewshot": 0,
+      "metric_list": [
+        {
+          "metric": "exact_match",
+          "aggregation": "mean",
+          "higher_is_better": true,
+          "ignore_case": true,
+          "ignore_punctuation": true
+        }
+      ],
+      "output_type": "generate_until",
+      "generation_kwargs": {
+        "max_new_tokens": 16,
+        "temperature": 0.0,
+        "do_sample": false,
+        "until": [
+          "\n\n"
+        ]
+      },
+      "repeats": 1,
+      "should_decontaminate": false,
+      "metadata": [
+        {
+          "version": 0.0
+        }
+      ],
+      "lmms_eval_specific_kwargs": {
+        "default": {
+          "format": "default",
+          "pre_prompt": "",
+          "post_prompt": "\nAnswer with the option's letter from the given choices directly."
+        },
+        "format": "default",
+        "pre_prompt": "",
+        "post_prompt": "\nAnswer with the option's letter from the given choices directly."
+      },
+      "model_specific_generation_kwargs": {
+        "llava": {
+          "image_aspect_ratio": "original"
+        }
+      }
+    }
+  },
+  "versions": {
+    "scienceqa_img_local": "Yaml"
+  },
+  "n-shot": {
+    "scienceqa_img_local": 0
+  },
+  "higher_is_better": {
+    "scienceqa_img_local": {
+      "exact_match": true
+    }
+  },
+  "n-samples": {
+    "scienceqa_img_local": {
+      "original": 2017,
+      "effective": 2017
+    }
+  },
+  "config": {
+    "model": "llava_onevision_training_free",
+    "model_args": "pretrained=/workspace/zap/ckpts/llava-onevision-qwen2-7b-ov,conv_template=qwen_1_5,model_name=llava_qwen_training_free,device_map=auto,enable_illava_vit=True,illava_vit_k=25,enable_illava_llm=True,illava_llm_k=9-18",
+    "batch_size": "1",
+    "batch_sizes": [],
+    "device": null,
+    "use_cache": null,
+    "limit": null,
+    "bootstrap_iters": 100000,
+    "gen_kwargs": "",
+    "random_seed": 0,
+    "numpy_seed": 1234,
+    "torch_seed": 1234,
+    "fewshot_seed": 1234
+  },
+  "git_hash": null,
+  "date": "20260429_154030",
+  "task_hashes": {},
+  "model_source": "llava_onevision_training_free",
+  "model_name": "/workspace/zap/ckpts/llava-onevision-qwen2-7b-ov",
+  "model_name_sanitized": "ckpts__llava-onevision-qwen2-7b-ov",
+  "system_instruction": null,
+  "system_instruction_sha": null,
+  "fewshot_as_multiturn": false,
+  "chat_template": null,
+  "chat_template_sha": null,
+  "start_time": 1039587.572161881,
+  "end_time": 1039901.13812669,
+  "total_evaluation_time_seconds": "313.5659648090368"
+}

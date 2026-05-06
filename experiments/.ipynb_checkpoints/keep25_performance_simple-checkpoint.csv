@@ -1,0 +1,8 @@
+keep_ratio,dataset,performance
+0.25,mme_local,"mme_cognition_score,none=412.1428571428571; mme_percetion_score,none=1570.0877350940377"
+0.25,mmbench_en_dev_local,"gpt_eval_score,none=79.46735395189003"
+0.25,scienceqa_img_local,"exact_match,none=0.9221616261774913"
+0.25,vizwiz_vqa_val_local,"exact_match,none=0.6083815698078273"
+0.25,gqa_local,"exact_match,none=0.6106694228017173"
+0.25,pope_local,"pope_accuracy,none=0.8866666666666667; pope_precision,none=0.9535974973931178; pope_recall,none=0.8128888888888889; pope_f1_score,none=0.8776391554702495; pope_yes_ratio,none=0.5"
+0.25,chartqa_local,"relaxed_overall,none=0.6868; relaxed_human_split,none=0.6088; relaxed_augmented_split,none=0.7648"

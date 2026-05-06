@@ -1043,7 +1043,7 @@ class Qwen2Model(Qwen2PreTrainedModel):
                             len_hidden_states = hidden_states.shape[1]
                             for r_val in illava_llm_r:
                                 all_indices = torch.sort(combined_attn, dim=-1).indices
-                                r = round(image_token_length * (1 - r_val))
+                                r = min(round(len_hidden_states * (1 - r_val)), image_token_length)
                                 low_k = all_indices[:r]  
                                 del_musk = torch.ones(len_hidden_states, dtype=torch.bool, device=hidden_states.device)
                                 del_musk[illava_llm_image_token_start_index + low_k] = False 
@@ -1091,7 +1091,7 @@ class Qwen2Model(Qwen2PreTrainedModel):
                     # get the indexs of the top ATTENTION_RANK tokens
                     indices = last_layer_attention_avg_last_tok_image.topk(image_token_length).indices
                     if illava_llm_r>0 and illava_llm_r<1:
-                        r = round(image_token_length*(1-illava_llm_r))
+                        r = min(round(hidden_states.shape[1]*(1-illava_llm_r)), image_token_length)
                     elif illava_llm_r > 1:
                         r = round(illava_llm_r)
 

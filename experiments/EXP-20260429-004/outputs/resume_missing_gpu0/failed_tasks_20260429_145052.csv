@@ -1,0 +1,4 @@
+keep_ratio,task,exit_code,ended_at
+0.50,mme_local,0_no_result_json,2026-04-29T14:51:38+00:00
+0.50,vizwiz_vqa_val_local,0_no_result_json,2026-04-29T14:52:17+00:00
+0.50,chartqa_local,0_no_result_json,2026-04-29T14:52:27+00:00

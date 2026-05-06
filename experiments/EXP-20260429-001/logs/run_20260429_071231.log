@@ -1,0 +1,25 @@
+[32m2026-04-29 07:12:33.511[0m | [1mINFO    [0m | [36mlmms_eval.__main__[0m:[36mcli_evaluate[0m:[36m294[0m - [1mVerbosity set to INFO[0m
+[32m2026-04-29 07:12:34.680[0m | [1mINFO    [0m | [36mlmms_eval.__main__[0m:[36mcli_evaluate_single[0m:[36m377[0m - [1mEvaluation tracker args: {'output_path': '/workspace/VFlowOpt/experiments/EXP-20260429-001/outputs/keep25_10bench'}[0m
+[32m2026-04-29 07:12:34.681[0m | [1mINFO    [0m | [36mlmms_eval.__main__[0m:[36mcli_evaluate_single[0m:[36m466[0m - [1mSelected Tasks: ['chartqa_local', 'docvqa_val_local', 'gqa_local', 'mmbench_en_dev_local', 'mme_local', 'mmstar_local', 'pope_local', 'scienceqa_img_local', 'vizwiz_vqa_val_local', 'vqav2_val_local'][0m
+[32m2026-04-29 07:12:34.682[0m | [1mINFO    [0m | [36mlmms_eval.evaluator[0m:[36msimple_evaluate[0m:[36m155[0m - [1mSetting random seed to 0 | Setting numpy seed to 1234 | Setting torch manual seed to 1234[0m
+Loaded LLaVA model: /workspace/zap/ckpts/llava-onevision-qwen2-7b-ov
+You are using a model of type llava to instantiate a model of type llava_qwen_training_free. This is not supported for all configurations of models and can yield errors.
+Overwriting config with {'mm_spatial_pool_stride': 2, 'mm_spatial_pool_mode': 'bilinear'}
+Loading vision tower: google/siglip-so400m-patch14-384
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:00<00:02,  1.09it/s]Loading checkpoint shards:  50%|█████     | 2/4 [00:01<00:01,  1.09it/s]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:02<00:00,  1.07it/s]Loading checkpoint shards: 100%|██████████| 4/4 [00:03<00:00,  1.45it/s]Loading checkpoint shards: 100%|██████████| 4/4 [00:03<00:00,  1.29it/s]
+Model Class: LlavaQwenTrainingFreeForCausalLM
+Resolving data files:   0%|          | 0/68 [00:00<?, ?it/s]Resolving data files: 100%|██████████| 68/68 [00:00<00:00, 217222.14it/s]
+Resolving data files:   0%|          | 0/143 [00:00<?, ?it/s]Resolving data files: 100%|██████████| 143/143 [00:00<00:00, 222802.92it/s]
+Resolving data files:   0%|          | 0/68 [00:00<?, ?it/s]Resolving data files: 100%|██████████| 68/68 [00:00<00:00, 622735.09it/s]
+Resolving data files:   0%|          | 0/143 [00:00<?, ?it/s]Resolving data files: 100%|██████████| 143/143 [00:00<00:00, 300343.25it/s]
+[32m2026-04-29 07:12:41.664[0m | [1mINFO    [0m | [36mlmms_eval.evaluator_utils[0m:[36mfrom_taskdict[0m:[36m91[0m - [1mNo metadata found in task config for vqav2_val_local, using default n_shot=0[0m
+[32m2026-04-29 07:12:41.665[0m | [1mINFO    [0m | [36mlmms_eval.evaluator_utils[0m:[36mfrom_taskdict[0m:[36m91[0m - [1mNo metadata found in task config for vizwiz_vqa_val_local, using default n_shot=0[0m
+[32m2026-04-29 07:12:41.665[0m | [1mINFO    [0m | [36mlmms_eval.evaluator_utils[0m:[36mfrom_taskdict[0m:[36m91[0m - [1mNo metadata found in task config for scienceqa_img_local, using default n_shot=0[0m
+[32m2026-04-29 07:12:41.665[0m | [1mINFO    [0m | [36mlmms_eval.evaluator_utils[0m:[36mfrom_taskdict[0m:[36m91[0m - [1mNo metadata found in task config for pope_local, using default n_shot=0[0m
+[32m2026-04-29 07:12:41.665[0m | [1mINFO    [0m | [36mlmms_eval.evaluator_utils[0m:[36mfrom_taskdict[0m:[36m91[0m - [1mNo metadata found in task config for mmstar_local, using default n_shot=0[0m
+[32m2026-04-29 07:12:41.665[0m | [1mINFO    [0m | [36mlmms_eval.evaluator_utils[0m:[36mfrom_taskdict[0m:[36m91[0m - [1mNo metadata found in task config for mme_local, using default n_shot=0[0m
+[32m2026-04-29 07:12:41.665[0m | [1mINFO    [0m | [36mlmms_eval.evaluator_utils[0m:[36mfrom_taskdict[0m:[36m91[0m - [1mNo metadata found in task config for mmbench_en_dev_local, using default n_shot=0[0m
+[32m2026-04-29 07:12:41.665[0m | [1mINFO    [0m | [36mlmms_eval.evaluator_utils[0m:[36mfrom_taskdict[0m:[36m91[0m - [1mNo metadata found in task config for gqa_local, using default n_shot=0[0m
+[32m2026-04-29 07:12:41.665[0m | [1mINFO    [0m | [36mlmms_eval.evaluator_utils[0m:[36mfrom_taskdict[0m:[36m91[0m - [1mNo metadata found in task config for chartqa_local, using default n_shot=0[0m
+[32m2026-04-29 07:12:41.665[0m | [1mINFO    [0m | [36mlmms_eval.api.task[0m:[36mbuild_all_requests[0m:[36m425[0m - [1mBuilding contexts for vqav2_val_local on rank 0...[0m
+experiments/EXP-20260429-001/run.sh: line 25: 1635919 Killed                  /opt/conda/envs/vflowopt_chartqa_eval/bin/lmms-eval --model llava_onevision_training_free --model_args "$MODEL_ARGS" --tasks "$TASKS" --batch_size 1 --log_samples --log_samples_suffix "keep25_10bench_${RUN_ID}" --output_path "$OUT_DIR"

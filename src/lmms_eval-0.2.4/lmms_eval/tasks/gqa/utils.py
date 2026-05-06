@@ -1,3 +1,5 @@
+import os
+
 from datasets import load_dataset
 
 GQA_RAW_IMAGE_DATASET = None
@@ -8,7 +10,11 @@ def gqa_doc_to_visual(doc):
     global GQA_RAW_IMAGE_DATASET
     global GQA_ID2IMAGE
     if GQA_RAW_IMAGE_DATASET is None:
-        GQA_RAW_IMAGE_DATASET = load_dataset("lmms-lab/GQA", "testdev_balanced_images", split="testdev", token=True)
+        local_image_parquet = os.getenv("GQA_IMAGE_PARQUET")
+        if local_image_parquet:
+            GQA_RAW_IMAGE_DATASET = load_dataset("parquet", data_files={"testdev": local_image_parquet}, split="testdev")
+        else:
+            GQA_RAW_IMAGE_DATASET = load_dataset("lmms-lab/GQA", "testdev_balanced_images", split="testdev", token=True)
         GQA_ID2IMAGE = {}
         for row in GQA_RAW_IMAGE_DATASET:
             GQA_ID2IMAGE[row["id"]] = row["image"].convert("RGB")

@@ -1,0 +1,4 @@
+model,ratio,MME,MMB,SQA,VizWiz,GQA,POPE,VQAText,ChartQA,DocVQA,MMStar
+student_ep20,0.10,1544.7,80.6,93.6,60.8,,,,,,
+student_ep20,0.25,1555.5,80.8,93.7,60.8,,,,,,
+student_ep20,0.50,,80.8,,,,,,,,

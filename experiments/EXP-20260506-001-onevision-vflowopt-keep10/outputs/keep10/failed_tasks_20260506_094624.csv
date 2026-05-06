@@ -1,0 +1,7 @@
+task,exit_code,ended_at
+textvqa_val,0_no_result_json,2026-05-06T09:46:37+00:00
+gqa_local,0_no_result_json,2026-05-06T09:46:52+00:00
+docvqa_val_local,137,2026-05-06T09:51:56+00:00
+chartqa_local,0_no_result_json,2026-05-06T09:52:16+00:00
+coco2014_cap_val,0_no_result_json,2026-05-06T09:52:38+00:00
+nocaps_val,0_no_result_json,2026-05-06T09:53:06+00:00
