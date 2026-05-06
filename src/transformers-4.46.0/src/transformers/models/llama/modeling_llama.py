@@ -980,6 +980,184 @@ class LlamaModel(LlamaPreTrainedModel):
             attentions=all_self_attns,
         )
 
+    def forward_illava(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        illava_config=None,
+        image_token_length=None,
+    ) -> Union[Tuple, BaseModelOutputWithPast]:
+        """LLaMA forward with progressive image-token pruning at illava_llm_k layers.
+
+        Pruning uses the previous layer's self-attention (averaged over heads, last
+        query token's attention to image tokens) as the importance signal. This
+        replicates the LLM-side branch of iLLaVA / VFlowOpt without depending on a
+        precomputed ViT attention map.
+        """
+        illava_llm_k = illava_config["illava_llm_k"]
+        illava_llm_r = illava_config["illava_llm_r"]
+        illava_llm_image_token_start_index = illava_config["illava_llm_image_token_start_index"]
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if self.gradient_checkpointing and self.training and use_cache:
+            use_cache = False
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        return_legacy_cache = False
+        if use_cache and not isinstance(past_key_values, Cache):
+            return_legacy_cache = True
+            if past_key_values is None:
+                past_key_values = DynamicCache()
+            else:
+                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
+        causal_mask = self._update_causal_mask(
+            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+        )
+        hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
+        next_decoder_cache = None
+
+        is_prefill = hidden_states.shape[1] > 1
+        # During decode (q_len == 1) different layers may hold KV caches of
+        # different sizes (staircase pruning), so a single causal mask sized to
+        # layer-0's KV would mismatch deeper layers. Pass attention_mask=None to
+        # SDPA in that case; with q_len=1 SDPA simply attends to all keys.
+        pruned_attention_mask = causal_mask if is_prefill else None
+        last_attn = None
+        # Track current image token count after each prune stage.
+        cur_image_token_length = image_token_length
+
+        for layer_idx, decoder_layer in enumerate(self.layers):
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            # Prune at illava_llm_k layers during prefill, using previous layer's attention.
+            if is_prefill and layer_idx in illava_llm_k and last_attn is not None and cur_image_token_length > 0:
+                stage_idx = illava_llm_k.index(layer_idx)
+                r_val = illava_llm_r[stage_idx]
+                # r_val is the per-stage image-token keep ratio (cumulative or per-step
+                # interpretation is decided by the caller). Here it is the keep
+                # fraction of the IMAGE tokens that are still alive entering this layer.
+                if 0.0 < r_val < 1.0:
+                    n_keep = max(1, int(round(cur_image_token_length * r_val)))
+                else:
+                    n_keep = max(1, int(round(cur_image_token_length)))
+                if n_keep < cur_image_token_length:
+                    # last_attn shape: [B, H, Q, K]
+                    attn_avg = last_attn.float().mean(dim=1)[0]  # [Q, K]
+                    last_q_to_img = attn_avg[-1, illava_llm_image_token_start_index : illava_llm_image_token_start_index + cur_image_token_length]
+                    top_idx = torch.topk(last_q_to_img, k=n_keep).indices
+                    top_idx = torch.sort(top_idx).values
+
+                    seq_len_curr = hidden_states.shape[1]
+                    keep_mask = torch.ones(seq_len_curr, dtype=torch.bool, device=hidden_states.device)
+                    img_slice = slice(illava_llm_image_token_start_index, illava_llm_image_token_start_index + cur_image_token_length)
+                    keep_mask[img_slice] = False
+                    keep_mask[illava_llm_image_token_start_index + top_idx] = True
+
+                    hidden_states = hidden_states[:, keep_mask, :]
+                    position_ids = position_ids[:, keep_mask]
+                    cache_position = cache_position[keep_mask]
+                    position_embeddings = self.rotary_emb(hidden_states, position_ids)
+                    new_seq_len = hidden_states.shape[1]
+                    new_cp = torch.arange(new_seq_len, device=hidden_states.device)
+                    pruned_attention_mask = self._update_causal_mask(
+                        torch.ones(hidden_states.shape[0], new_seq_len, dtype=torch.long, device=hidden_states.device),
+                        hidden_states,
+                        new_cp,
+                        None,
+                        False,
+                    )
+                    cur_image_token_length = n_keep
+
+            # Need attention output from layer (k-1) so that the next prune can use it.
+            need_attn = ((layer_idx + 1) in illava_llm_k) and is_prefill
+            layer_output_attentions = output_attentions or need_attn
+
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    decoder_layer.__call__,
+                    hidden_states,
+                    pruned_attention_mask,
+                    position_ids,
+                    past_key_values,
+                    layer_output_attentions,
+                    use_cache,
+                    cache_position,
+                    position_embeddings,
+                )
+            else:
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    attention_mask=pruned_attention_mask,
+                    position_ids=position_ids,
+                    past_key_value=past_key_values,
+                    output_attentions=layer_output_attentions,
+                    use_cache=use_cache,
+                    cache_position=cache_position,
+                    position_embeddings=position_embeddings,
+                )
+
+            hidden_states = layer_outputs[0]
+
+            if use_cache:
+                next_decoder_cache = layer_outputs[2 if layer_output_attentions else 1]
+
+            if layer_output_attentions:
+                last_attn = layer_outputs[1]
+                if output_attentions:
+                    all_self_attns += (last_attn,)
+            else:
+                last_attn = None
+
+        hidden_states = self.norm(hidden_states)
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        next_cache = next_decoder_cache if use_cache else None
+        if return_legacy_cache:
+            next_cache = next_cache.to_legacy_cache()
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=next_cache,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+        )
+
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -1207,6 +1385,70 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
             logits = torch.cat(logits, dim=-1)
         else:
             # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+            logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **loss_kwargs)
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return (loss,) + output if loss is not None else output
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+    def forward_illava(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        num_logits_to_keep: int = 0,
+        illava_config=None,
+        image_token_length=None,
+        **loss_kwargs,
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
+        """LLaVA-1.5 LM forward with VFlowOpt-style LLM-side image-token pruning."""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.model.forward_illava(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+            illava_config=illava_config,
+            image_token_length=image_token_length,
+        )
+
+        hidden_states = outputs[0]
+        if self.config.pretraining_tp > 1:
+            lm_head_slices = self.lm_head.weight.split(self.vocab_size // self.config.pretraining_tp, dim=0)
+            logits = [F.linear(hidden_states, lm_head_slices[i]) for i in range(self.config.pretraining_tp)]
+            logits = torch.cat(logits, dim=-1)
+        else:
             logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
 
         loss = None
